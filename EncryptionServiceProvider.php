@@ -2,7 +2,8 @@
 
 use Illuminate\Support\ServiceProvider;
 
-class EncryptionServiceProvider extends ServiceProvider {
+class EncryptionServiceProvider extends ServiceProvider
+{
 
 	/**
 	 * Register the service provider.

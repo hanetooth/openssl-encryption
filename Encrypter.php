@@ -2,11 +2,13 @@
 
 use Exception;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Support\Str;
 use Symfony\Component\Security\Core\Util\StringUtils;
 use Symfony\Component\Security\Core\Util\SecureRandom;
 use Illuminate\Contracts\Encryption\Encrypter as EncrypterContract;
 
-class Encrypter implements EncrypterContract {
+class Encrypter implements EncrypterContract
+{
 
 	/**
 	 * The encryption key.
@@ -20,14 +22,14 @@ class Encrypter implements EncrypterContract {
 	 *
 	 * @var string
 	 */
-	protected $cipher = MCRYPT_RIJNDAEL_128;
+	protected $cipher = 'AES-128-CBC';
 
 	/**
 	 * The mode used for encryption.
 	 *
 	 * @var string
 	 */
-	protected $mode = MCRYPT_MODE_CBC;
+	protected $mode = null;
 
 	/**
 	 * The block size of the cipher.
@@ -55,9 +57,13 @@ class Encrypter implements EncrypterContract {
 	 */
 	public function encrypt($value)
 	{
-		$iv = mcrypt_create_iv($this->getIvSize(), $this->getRandomizer());
+        $iv = Str::randomBytes($this->getIvSize());
 
-		$value = base64_encode($this->padAndMcrypt($value, $iv));
+		$value = \openssl_encrypt(serialize($value), $this->cipher, $this->key, 0, $iv);
+
+		if ($value === false) {
+			throw new Exception('Could not encrypt the data.');
+		}
 
 		// Once we have the encrypted value we will go ahead base64_encode the input
 		// vector and create the MAC for the encrypted value so we can verify its
@@ -67,19 +73,16 @@ class Encrypter implements EncrypterContract {
 		return base64_encode(json_encode(compact('iv', 'value', 'mac')));
 	}
 
-	/**
-	 * Pad and use mcrypt on the given value and input vector.
-	 *
-	 * @param  string  $value
-	 * @param  string  $iv
-	 * @return string
-	 */
-	protected function padAndMcrypt($value, $iv)
-	{
-		$value = $this->addPadding(serialize($value));
-
-		return mcrypt_encrypt($this->cipher, $this->key, $value, $this->mode, $iv);
-	}
+    /**
+     * Encrypt a string without serialization.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    public function encryptString($value)
+    {
+        return $this->encrypt($value, false);
+    }
 
 	/**
 	 * Decrypt the given value.
@@ -89,38 +92,29 @@ class Encrypter implements EncrypterContract {
 	 */
 	public function decrypt($payload)
 	{
-		$payload = $this->getJsonPayload($payload);
+        $payload = $this->getJsonPayload($payload);
 
-		// We'll go ahead and remove the PKCS7 padding from the encrypted value before
-		// we decrypt it. Once we have the de-padded value, we will grab the vector
-		// and decrypt the data, passing back the unserialized from of the value.
-		$value = base64_decode($payload['value']);
+        $iv = base64_decode($payload['iv']);
 
-		$iv = base64_decode($payload['iv']);
+        $decrypted = \openssl_decrypt($payload['value'], $this->cipher, $this->key, 0, $iv);
 
-		return unserialize($this->stripPadding($this->mcryptDecrypt($value, $iv)));
+        if ($decrypted === false) {
+            throw new DecryptException('Could not decrypt the data.');
+        }
+
+        return unserialize($decrypted);
 	}
 
-	/**
-	 * Run the mcrypt decryption routine for the value.
-	 *
-	 * @param  string  $value
-	 * @param  string  $iv
-	 * @return string
-	 *
-	 * @throws \Exception
-	 */
-	protected function mcryptDecrypt($value, $iv)
-	{
-		try
-		{
-			return mcrypt_decrypt($this->cipher, $this->key, $value, $this->mode, $iv);
-		}
-		catch (Exception $e)
-		{
-			throw new DecryptException($e->getMessage());
-		}
-	}
+    /**
+     * Decrypt the given string without unserialization.
+     *
+     * @param  string  $payload
+     * @return string
+     */
+    public function decryptString($payload)
+    {
+        return $this->decrypt($payload, false);
+    }
 
 	/**
 	 * Get the JSON array from the given payload.
@@ -180,46 +174,6 @@ class Encrypter implements EncrypterContract {
 	}
 
 	/**
-	 * Add PKCS7 padding to a given value.
-	 *
-	 * @param  string  $value
-	 * @return string
-	 */
-	protected function addPadding($value)
-	{
-		$pad = $this->block - (strlen($value) % $this->block);
-
-		return $value.str_repeat(chr($pad), $pad);
-	}
-
-	/**
-	 * Remove the padding from the given value.
-	 *
-	 * @param  string  $value
-	 * @return string
-	 */
-	protected function stripPadding($value)
-	{
-		$pad = ord($value[($len = strlen($value)) - 1]);
-
-		return $this->paddingIsValid($pad, $value) ? substr($value, 0, $len - $pad) : $value;
-	}
-
-	/**
-	 * Determine if the given padding for a value is valid.
-	 *
-	 * @param  string  $pad
-	 * @param  string  $value
-	 * @return bool
-	 */
-	protected function paddingIsValid($pad, $value)
-	{
-		$beforePad = strlen($value) - $pad;
-
-		return substr($value, $beforePad) == str_repeat(substr($value, -1), $pad);
-	}
-
-	/**
 	 * Verify that the encryption payload is valid.
 	 *
 	 * @param  array|mixed  $data
@@ -237,23 +191,7 @@ class Encrypter implements EncrypterContract {
 	 */
 	protected function getIvSize()
 	{
-		return mcrypt_get_iv_size($this->cipher, $this->mode);
-	}
-
-	/**
-	 * Get the random data source available for the OS.
-	 *
-	 * @return int
-	 */
-	protected function getRandomizer()
-	{
-		if (defined('MCRYPT_DEV_URANDOM')) return MCRYPT_DEV_URANDOM;
-
-		if (defined('MCRYPT_DEV_RANDOM')) return MCRYPT_DEV_RANDOM;
-
-		mt_srand();
-
-		return MCRYPT_RAND;
+		return 16;
 	}
 
 	/**
@@ -276,8 +214,6 @@ class Encrypter implements EncrypterContract {
 	public function setCipher($cipher)
 	{
 		$this->cipher = $cipher;
-
-		$this->updateBlockSize();
 	}
 
 	/**
@@ -289,18 +225,6 @@ class Encrypter implements EncrypterContract {
 	public function setMode($mode)
 	{
 		$this->mode = $mode;
-
-		$this->updateBlockSize();
-	}
-
-	/**
-	 * Update the block size for the current cipher and mode.
-	 *
-	 * @return void
-	 */
-	protected function updateBlockSize()
-	{
-		$this->block = mcrypt_get_iv_size($this->cipher, $this->mode);
 	}
 
 }

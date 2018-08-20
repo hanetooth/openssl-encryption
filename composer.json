@@ -1,15 +1,15 @@
 {
-    "name": "illuminate/encryption",
+    "name": "zugoripls/openssl-encryption",
     "description": "Openssl version of Illuminate Encryption package.",
     "license": "MIT",
     "support": {
-        "issues": "https://github.com/laravel/framework/issues",
-        "source": "https://github.com/laravel/framework"
+        "issues": "https://github.com/zugoripls/openssl-encryption/issues",
+        "source": "https://github.com/zugoripls/openssl-encryption"
     },
     "authors": [
         {
-            "name": "Taylor Otwell",
-            "email": "taylorotwell@gmail.com"
+            "name": "Zugor",
+            "email": "zugoripls@gmail.com"
         }
     ],
     "require": {

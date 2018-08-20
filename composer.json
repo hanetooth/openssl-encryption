@@ -1,8 +1,7 @@
 {
     "name": "illuminate/encryption",
-    "description": "The Illuminate Encryption package.",
+    "description": "Openssl version of Illuminate Encryption package.",
     "license": "MIT",
-    "homepage": "http://laravel.com",
     "support": {
         "issues": "https://github.com/laravel/framework/issues",
         "source": "https://github.com/laravel/framework"
@@ -19,6 +18,9 @@
         "illuminate/contracts": "5.0.*",
         "illuminate/support": "5.0.*",
         "symfony/security-core": "2.6.*"
+    },
+    "require-dev":  {
+        "phpunit/phpunit": "~4.0"
     },
     "autoload": {
         "psr-4": {
